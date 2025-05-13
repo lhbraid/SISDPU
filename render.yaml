@@ -1,0 +1,61 @@
+# render.yaml
+# This file defines the services for deploying the SISDPU Dashboard on Render.
+# You can deploy this blueprint by visiting https://dashboard.render.com/blueprints
+
+services:
+  - type: web
+    name: sisdpu-dashboard-app # The Dash application
+    env: python
+    plan: free # Or your preferred plan
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn src.app:app.server --workers 4 --threads 4 --worker-tmp-dir /dev/shm"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0 # Match your development environment
+      - key: PORT # Render sets this automatically for the web service
+        value: 10000 # Default for Render web services, but Render injects it
+      # Add any other environment variables your Dash app might need
+
+  - type: web
+    name: sisdpu-api # The Flask API
+    env: python
+    plan: free # Or your preferred plan
+    buildCommand: "pip install -r requirements.txt && python api/create_tables.py && python api/populate_db.py"
+    startCommand: "gunicorn api.main:app --bind 0.0.0.0:$PORT_API"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DB_USERNAME
+        fromDatabase: # Link to the PostgreSQL database service
+          name: sisdpu-database
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: sisdpu-database
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: sisdpu-database
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: sisdpu-database
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: sisdpu-database
+          property: database
+      - key: PORT_API # Render sets PORT, but we need a specific one for the API if not the main web service
+        value: 5001 # The port your API listens on, ensure Procfile matches if used without Blueprint
+      - key: FLASK_APP
+        value: api.main:app
+      - key: FLASK_ENV
+        value: production
+
+databases:
+  - name: sisdpu-database
+    plan: free # Or your preferred plan
+    databaseName: sisdpu_db
+    user: sisdpu_user
+    # Render will generate a strong password if not specified
+
